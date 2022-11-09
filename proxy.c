@@ -37,7 +37,7 @@ void doit(int fd)
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version);
-
+  printf("%s--%s--%s", method, uri, version);
   parse_uri(uri, hostname, portnumber, path);
 
   make_requesthdrs(server_header, hostname, path, &rio);
@@ -99,20 +99,20 @@ int parse_uri(char *url, char *hostname, char *port, char *filename)
     strcpy(arg1, url);
   }
 
-  if (p = strchr(arg1, ':')){     // 포트 번호가 함께 들어온 경우 ex)172.19.112.1:5000/home.html
+  if (p = strchr(arg1, ':')){     // 포트 번호가 함께 들어온 경우 hostname:port/home.html
     *p = '\0';
-    sscanf(arg1, "%s", hostname);       // hostname = 172.19.112.1
-    sscanf(p+1, "%s", arg2);            // 5000/home.html?n1=5&n2=10
+    sscanf(arg1, "%s", hostname);       // hostname
+    sscanf(p+1, "%s", arg2);            // port/home.html?n1=5&n2=10
 
     p = strchr(arg2, '/');
     *p = '\0';
-    sscanf(arg2, "%s", port);           // 5000
+    sscanf(arg2, "%s", port);           // port
     *p = '/';
     sscanf(p, "%s", filename);        // home.html?n1=5&n2=10
     
-    // printf("%s이랑 %s이고 %s임\n", hostname, port, filename);
+    printf("%s이랑 %s이고 %s임\n", hostname, port, filename);
   }
-  else{                           // 포트 번호가 포함되지 않은 경우 ex)172.19.112.1/home.html
+  else{                           // 포트 번호가 포함되지 않은 경우 hostname.1/home.html
     p = strchr(arg1, '/');
     *p = '\0';
     sscanf(arg1, "%s", hostname);
