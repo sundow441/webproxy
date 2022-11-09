@@ -1,11 +1,14 @@
 #include <stdio.h>
 #include "csapp.h"
+#include "sbuf.h"
 
-/* Recommended max cache and object sizes */
+// 캐시 및 오브젝트의 최대 크기
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
+#define NTHREADS 4
+#define SBUFSIZE 16
 
-/* You won't lose style points for including this long line in your code */
+//헤더
 static const char *user_agent_hdr =
     "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 "
     "Firefox/10.0.3\r\n";
@@ -13,16 +16,53 @@ static const char *host_hdr = "Host: %s\r\n";
 static const char *connection_hdr = "Connection: close\r\n";
 static const char *proxy_connection_hdr = "Proxy-Connection: close\r\n";
 
+// 
 static const char *user_agent_key = "User_Agent";
 static const char *host_key = "Host";
 static const char *connection_key = "Connection";
 static const char *proxy_connection_key = "Proxy_Connection";
 
+sbuf_t sbuf;
 
 void doit(int fd);
 void make_requesthdrs(char *header, char *hostname, char *path, rio_t *rp);
 int parse_uri(char *url, char *hostname, char *port, char *filename);
 void *thread(void *vargp);
+
+int main(int argc, char **argv) {
+  int i, listenfd, connfd;
+  char hostname[MAXLINE], port[MAXLINE];
+  socklen_t clientlen;
+  struct sockaddr_storage clientaddr;
+  pthread_t tid;
+
+  /* Check command line args */
+  if (argc != 2) {
+    fprintf(stderr, "usage: %s <port>\n", argv[0]);
+    exit(1);
+  }
+
+  listenfd = Open_listenfd(argv[1]);
+  sbuf_init(&sbuf, SBUFSIZE);
+  for(i = 0; i < NTHREADS; i++)
+  {
+    Pthread_create(&tid, NULL, thread, NULL);
+  }
+
+  while (1) {
+    clientlen = sizeof(clientaddr);
+    // connfdp = Malloc(sizeof(int));
+    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);  // line:netp:tiny:accept
+    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+    printf("Accepted connection from (%s, %s)\n", hostname, port);
+    sbuf_insert(&sbuf, connfd);
+    // Pthread_create(&tid, NULL, thread, connfdp);
+    // doit(connfd);
+    // Close(connfd);
+  }
+  printf("%s", user_agent_hdr);
+  return 0;
+}
 
 void doit(int fd)
 {
@@ -37,7 +77,6 @@ void doit(int fd)
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version);
-  printf("%s--%s--%s", method, uri, version);
   parse_uri(uri, hostname, portnumber, path);
 
   make_requesthdrs(server_header, hostname, path, &rio);
@@ -110,7 +149,7 @@ int parse_uri(char *url, char *hostname, char *port, char *filename)
     *p = '/';
     sscanf(p, "%s", filename);        // home.html?n1=5&n2=10
     
-    printf("%s이랑 %s이고 %s임\n", hostname, port, filename);
+    // printf("%s이랑 %s이고 %s임\n", hostname, port, filename);
   }
   else{                           // 포트 번호가 포함되지 않은 경우 hostname.1/home.html
     p = strchr(arg1, '/');
@@ -125,35 +164,15 @@ int parse_uri(char *url, char *hostname, char *port, char *filename)
 
 void *thread(void *vargp)
 {
-  int connfd = (int)vargp;
   Pthread_detach(pthread_self());
-  doit(connfd);
-  Close(connfd);
-}
-
-int main(int argc, char **argv) {
-  int listenfd, connfd;
-  char hostname[MAXLINE], port[MAXLINE];
-  socklen_t clientlen;
-  struct sockaddr_storage clientaddr;
-  pthread_t tid;
-
-  /* Check command line args */
-  if (argc != 2) {
-    fprintf(stderr, "usage: %s <port>\n", argv[0]);
-    exit(1);
+  while(1)
+  {
+    int connfd = sbuf_remove(&sbuf);
+    doit(connfd);
+    Close(connfd);
   }
-
-  listenfd = Open_listenfd(argv[1]);
-  while (1) {
-    clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);  // line:netp:tiny:accept
-    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
-    printf("Accepted connection from (%s, %s)\n", hostname, port);
-    Pthread_create(&tid, NULL, thread, (void *)connfd);
-    // doit(connfd);
-    // Close(connfd);
-  }
-  printf("%s", user_agent_hdr);
-  return 0;
+  // Free(vargp);
+  // doit(connfd);
+  // Close(connfd);
+  // return NULL;
 }
